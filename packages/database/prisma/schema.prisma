@@ -1,0 +1,58 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Session {
+  id              String        @id @default(uuid())
+  externalId      String        @unique // e.g., Zoom Meeting ID
+  scheduledStart  DateTime
+  status          SessionStatus @default(ACTIVE)
+  createdAt       DateTime      @default(now())
+  
+  participants    Participant[]
+  snapshots       ConfidenceSnapshot[]
+  evidenceLogs    EvidenceLog[]
+}
+
+enum SessionStatus {
+  SCHEDULED
+  ACTIVE
+  COMPLETED
+}
+
+model Participant {
+  id                 String  @id @default(uuid())
+  sessionId          String
+  externalId         String  // e.g., Zoom Participant ID
+  initialDisplayName String
+  
+  session Session @relation(fields: [sessionId], references: [id])
+}
+
+model ConfidenceSnapshot {
+  id            String   @id @default(uuid())
+  sessionId     String
+  participantId String
+  score         Float
+  explanation   String?
+  timestamp     DateTime @default(now())
+
+  session Session @relation(fields: [sessionId], references: [id])
+}
+
+model EvidenceLog {
+  id            String   @id @default(uuid())
+  sessionId     String
+  participantId String
+  engineSource  String
+  score         Float
+  weight        Float
+  reason        String
+  timestamp     DateTime @default(now())
+
+  session Session @relation(fields: [sessionId], references: [id])
+}
