@@ -4,6 +4,23 @@ Welcome to **Sherlock CIE**, an advanced, event-driven microservices architectur
 
 By analyzing metadata, behavioral biometrics, and conversational transcripts in real-time, Sherlock guarantees zero-trust remote assessments.
 
+### Getting Started (Local Windows Environment)
+
+Since the original architecture relied on Docker and Go which may be unavailable on some Windows systems, we provide a native shim setup.
+
+1. **Install Redis natively for Windows:** Download the pre-compiled `redis-server.exe` (v5.0.14.1) and run it on port `6379`.
+2. **Install dependencies:** `pnpm install` at the root.
+3. **Start the Web UI:** `cd apps/web && pnpm run dev` (Runs on port `3000`)
+4. **Start the Gateway:** `cd apps/gateway && pnpm run dev` (Runs on port `3001`)
+5. **Start the Notification Engine:** `cd apps/notification && pnpm run start:dev` (Runs on port `3002`)
+6. **Start the AI Engine:** `cd apps/ai-engine && .venv\Scripts\python.exe -m uvicorn main:app --port 8000`
+7. **Start the Confidence Engine Shim:** `pnpm run start:confidence` from the root directory.
+
+To run the end-to-end simulation script:
+```bash
+pnpm run test:e2e
+```
+
 ---
 
 ## 🏗 System Architecture

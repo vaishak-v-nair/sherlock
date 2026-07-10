@@ -24,32 +24,37 @@ redisClient.on('pmessage', (pattern, channel, message) => {
   
   let totalWeight = 0;
   let weightedScoreSum = 0;
+  const DECAY_RATE = 0.05; // 5% decay per second
+  const now = Date.now();
   
   for (const ev of sessionEvents[event.sessionId]) {
-    totalWeight += ev.weight;
-    weightedScoreSum += (ev.score * ev.weight);
+    const timeDiffSeconds = Math.max(0, (now - new Date(ev.timestamp).getTime()) / 1000);
+    const decayFactor = Math.exp(-DECAY_RATE * timeDiffSeconds);
+    const decayedWeight = ev.weight * decayFactor;
+    
+    totalWeight += decayedWeight;
+    weightedScoreSum += (ev.score * decayedWeight);
   }
   
-  let aggregateScore = totalWeight > 0 ? weightedScoreSum / totalWeight : 0;
+  const rawAggregateScore = totalWeight > 0 ? weightedScoreSum / totalWeight : 0;
   
-  // Clamp aggregate score between 0 and 1 to satisfy strict Zod Schema
-  aggregateScore = Math.max(0, Math.min(1, aggregateScore + 1)); 
   const currentState = sessionState[event.sessionId];
   let newState = currentState;
-  let explanation = `Aggregate score is currently ${aggregateScore.toFixed(2)}.`;
+  let explanation = `Aggregate score is currently ${rawAggregateScore.toFixed(2)}.`;
   
-  // Basic heuristic: 
-  // If a negative event comes through (score < 0), let's flag suspicious or failed
-  if (aggregateScore < -0.6) {
+  if (rawAggregateScore < -0.6) {
     newState = 'FAILED';
-    explanation = `Candidate has failed multiple heuristics with a severe negative score (${aggregateScore.toFixed(2)}). Terminating session.`;
-  } else if (aggregateScore < -0.2) {
+    explanation = `Candidate has failed multiple heuristics with a severe negative score (${rawAggregateScore.toFixed(2)}). Terminating session.`;
+  } else if (rawAggregateScore < -0.2) {
     newState = 'SUSPICIOUS';
-    explanation = `Candidate exhibits highly suspicious behavior (${aggregateScore.toFixed(2)}). Moderator review requested.`;
-  } else if (aggregateScore > 0.5) {
+    explanation = `Candidate exhibits highly suspicious behavior (${rawAggregateScore.toFixed(2)}). Moderator review requested.`;
+  } else if (rawAggregateScore > 0.5) {
     newState = 'VERIFIED';
     explanation = `Candidate verified successfully.`;
   }
+  
+  // Clamp score between 0 and 1 to satisfy strict Zod Schema for UI broadcasting
+  const clampedScore = Math.max(0, Math.min(1, rawAggregateScore + 1));
   
   if (newState !== currentState || event.score < 0) {
     sessionState[event.sessionId] = newState;
@@ -61,7 +66,7 @@ redisClient.on('pmessage', (pattern, channel, message) => {
       participants: [
         {
           participantId: event.participantId,
-          confidenceScore: aggregateScore
+          confidenceScore: clampedScore
         }
       ],
       identifiedCandidateId: newState === 'VERIFIED' ? event.participantId : null,
