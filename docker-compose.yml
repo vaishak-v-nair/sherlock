@@ -1,21 +1,105 @@
-version: '3.8'
+version: '3.9'
+
 services:
+  # ─── Infrastructure ───────────────────────────────────────
   postgres:
-    image: postgres:15-alpine
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: sherlock
+    image: postgres:16-alpine
+    container_name: sherlock-postgres
+    restart: unless-stopped
     ports:
-      - "5432:5432"
+      - '5432:5432'
+    environment:
+      POSTGRES_USER: sherlock
+      POSTGRES_PASSWORD: sherlock_dev
+      POSTGRES_DB: sherlock
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U sherlock']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   redis:
     image: redis:7-alpine
+    container_name: sherlock-redis
+    restart: unless-stopped
     ports:
-      - "6379:6379"
+      - '6379:6379'
     volumes:
       - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── Backend Services ─────────────────────────────────────
+  gateway:
+    build:
+      context: .
+      dockerfile: docker/gateway.Dockerfile
+    container_name: sherlock-gateway
+    restart: unless-stopped
+    ports:
+      - '3001:3001'
+    environment:
+      - GATEWAY_PORT=3001
+      - REDIS_URL=redis://redis:6379
+      - DATABASE_URL=postgresql://sherlock:sherlock_dev@postgres:5432/sherlock
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  ai-engine:
+    build:
+      context: .
+      dockerfile: docker/ai-engine.Dockerfile
+    container_name: sherlock-ai-engine
+    restart: unless-stopped
+    ports:
+      - '8000:8000'
+    environment:
+      - AI_ENGINE_PORT=8000
+      - REDIS_URL=redis://redis:6379
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GEMINI_MODEL=gemini-2.5-pro
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  notification:
+    build:
+      context: .
+      dockerfile: docker/notification.Dockerfile
+    container_name: sherlock-notification
+    restart: unless-stopped
+    ports:
+      - '3002:3002'
+    environment:
+      - NOTIFICATION_PORT=3002
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: docker/web.Dockerfile
+    container_name: sherlock-web
+    restart: unless-stopped
+    ports:
+      - '3000:3000'
+    environment:
+      - NEXT_PUBLIC_NOTIFICATION_URL=http://localhost:3002
+      - NEXT_PUBLIC_GATEWAY_URL=http://localhost:3001
+    depends_on:
+      - gateway
+      - notification
+
 volumes:
   postgres_data:
   redis_data:

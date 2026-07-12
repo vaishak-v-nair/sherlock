@@ -1,102 +1,187 @@
-# Sherlock Continuous Identity Engine (CIE)
+# Sherlock CIE — Candidate Identity Engine
 
-Welcome to **Sherlock CIE**, an advanced, event-driven microservices architecture designed to continuously authenticate candidate identities during high-stakes remote interviews. 
+> **Real-time, AI-powered candidate identification for live video interviews.**
 
-By analyzing metadata, behavioral biometrics, and conversational transcripts in real-time, Sherlock guarantees zero-trust remote assessments.
-
-### Getting Started (Local Windows Environment)
-
-Since the original architecture relied on Docker and Go which may be unavailable on some Windows systems, we provide a native shim setup.
-
-1. **Install Redis natively for Windows:** Download the pre-compiled `redis-server.exe` (v5.0.14.1) and run it on port `6379`.
-2. **Install dependencies:** `pnpm install` at the root.
-3. **Start the Web UI:** `cd apps/web && pnpm run dev` (Runs on port `3000`)
-4. **Start the Gateway:** `cd apps/gateway && pnpm run dev` (Runs on port `3001`)
-5. **Start the Notification Engine:** `cd apps/notification && pnpm run start:dev` (Runs on port `3002`)
-6. **Start the AI Engine:** `cd apps/ai-engine && .venv\Scripts\python.exe -m uvicorn main:app --port 8000`
-7. **Start the Confidence Engine Shim:** `pnpm run start:confidence` from the root directory.
-
-To run the end-to-end simulation script:
-```bash
-pnpm run test:e2e
-```
+Sherlock CIE is a production-grade microservices system that continuously identifies which meeting participant is the interview candidate during a live video interview. It combines multiple weak signals—metadata, audio, video, transcript, and behavioral analysis—into a confidence-weighted decision with full explainability.
 
 ---
 
-## 🏗 System Architecture
-
-Sherlock CIE leverages an event-driven pub/sub architecture built around Redis. 
+## Architecture
 
 ```mermaid
 graph TD
-    A[Interview Platform Webhooks] -->|IngestionEvent| B(Gateway - NestJS)
-    B -->|Publishes| C[(Redis: meeting.events.*)]
-    
-    C -->|Subscribes| D(AI Engine - Python/FastAPI)
-    D -->|Analyzes Transcripts & Video| D
-    D -->|Publishes| E[(Redis: evidence.events.*)]
-    
-    E -->|Subscribes| F(Confidence Engine - Go)
-    F -->|Aggregates Scores & State Machine| F
-    F -->|Publishes| G[(Redis: state.events.*)]
-    
-    G -->|Subscribes| H(Notification Engine - NestJS)
-    H -->|Socket.io Broadcast| I[React UI Dashboard]
+    subgraph Ingestion["Ingestion Layer"]
+        A[Meeting Platform Webhooks] --> B[Gateway / NestJS]
+        B --> C[Event Normalizer]
+    end
+
+    subgraph Intelligence["Intelligence Layer / FastAPI"]
+        C -->|Redis Pub/Sub| D[Metadata Engine]
+        C -->|Redis Pub/Sub| E[Conversation Engine]
+        C -->|Redis Pub/Sub| F[Audio Engine]
+        C -->|Redis Pub/Sub| G[Video Engine]
+        C -->|Redis Pub/Sub| H[Behavioral Engine]
+    end
+
+    subgraph Reasoning["Reasoning Layer"]
+        D -->|Evidence| I[Evidence Aggregator]
+        E -->|Evidence| I
+        F -->|Evidence| I
+        G -->|Evidence| I
+        H -->|Evidence| I
+        I --> J[Confidence Engine]
+        J --> K[Explainability Engine]
+        K --> L[Decision Engine]
+    end
+
+    subgraph Delivery["Delivery Layer"]
+        L -->|Redis Pub/Sub| M[Notification Server]
+        L -->|Redis Pub/Sub| N[Persistence Service]
+        M -->|WebSocket| O[Dashboard / Next.js]
+    end
 ```
 
-### Core Components
-1. **Gateway (`apps/gateway`)**: A NestJS edge proxy that ingests provider webhooks, sanitizes them via strict Zod contracts, and streams them onto Redis.
-2. **AI Engine (`apps/ai-engine`)**: A Python/FastAPI worker utilizing `google-genai` and deterministic heuristics to evaluate conversational coherence and metadata anomalies.
-3. **Confidence Engine (`apps/confidence-engine`)**: A highly concurrent Go microservice that aggregates evidence scores and executes a thread-safe state machine to transition candidate confidence (e.g., `PENDING` -> `SUSPICIOUS`).
-4. **Notification Engine (`apps/notification`)**: A NestJS Socket.io server that bridges backend Redis events to connected browser clients.
-5. **Web Dashboard (`apps/web`)**: A Next.js/Tailwind frontend visualizing real-time identity states.
+### Core Principle
 
-### Shared Libraries
-- `@sherlock/contracts`: Single source of truth for Zod schemas defining cross-boundary events.
-- `@sherlock/redis-client`: Singleton Redis connection pool.
-- `@sherlock/database`: Prisma 7 ORM schemas (Postgres).
+> **Evidence-first reasoning.** No single signal makes the decision. Every intelligence engine produces independently weighted evidence. The Confidence Engine aggregates all evidence with temporal decay and Bayesian updating. The Decision Engine applies configurable thresholds with hysteresis to prevent oscillation. The Explainability Engine generates human-readable justifications for every determination.
 
 ---
 
-## 🚀 Local Development Setup
+## Tech Stack
+
+| Layer         | Technology                                   |
+| ------------- | -------------------------------------------- |
+| Frontend      | Next.js 15, React 19, TailwindCSS, shadcn/ui |
+| Gateway       | NestJS, TypeScript                           |
+| AI Engine     | FastAPI, Python 3.12                         |
+| Reasoning     | TypeScript (Go-ready architecture)           |
+| Notification  | NestJS, Socket.io                            |
+| Database      | PostgreSQL 16, Prisma ORM                    |
+| Cache/Pub-Sub | Redis 7                                      |
+| LLM           | Gemini 2.5 Pro                               |
+| Contracts     | Zod (TS) / Pydantic (Python)                 |
+| Monorepo      | Turborepo, pnpm                              |
+| Deployment    | Docker, Vercel, Railway                      |
+
+---
+
+## Quick Start
 
 ### Prerequisites
-- Node.js (v20+)
-- pnpm
-- Python (3.11+)
-- Go (1.21+)
-- Docker (for Redis and Postgres)
 
-### 1. Start Infrastructure
-Run the core caching and database layers.
-```bash
-docker-compose up -d
-```
+- Node.js 20+
+- pnpm 9+
+- Python 3.12+
+- Docker & Docker Compose
 
-### 2. Install Dependencies
+### Setup
+
 ```bash
+# Clone
+git clone https://github.com/vaishak-v-nair/sherlock.git
+cd sherlock
+
+# Install dependencies
 pnpm install
+
+# Copy environment variables
+cp .env.example .env
+
+# Start infrastructure
+docker compose up -d postgres redis
+
+# Setup Python AI engine
+cd apps/ai-engine
+python -m venv .venv
+.venv/Scripts/pip install -r requirements.txt  # Windows
+# source .venv/bin/activate && pip install -r requirements.txt  # macOS/Linux
+cd ../..
+
+# Apply database migrations
+pnpm db:push
+
+# Start all services
+pnpm dev
 ```
 
-### 3. Start the Ecosystem
-You must boot the services in individual terminals:
-- **NestJS Gateway**: `cd apps/gateway && pnpm run start:dev`
-- **Python AI Engine**: `cd apps/ai-engine && python main.py`
-- **Go Confidence Engine**: `cd apps/confidence-engine && go run main.go`
-- **Notification Server**: `cd apps/notification && pnpm run start:dev`
-- **React Dashboard**: `cd apps/web && pnpm run dev`
+### Run the Simulation
 
-### 4. Run the Mock Simulation
-To test the entire pipeline locally without joining a real video call, execute the End-to-End Mock script. This simulates a suspicious candidate turning off their camera and speaking nervously.
 ```bash
-pnpm run test:e2e
+# In a new terminal, trigger the E2E mock simulation
+pnpm test:e2e
 ```
-*Watch the React Dashboard turn RED (`FAILED` / `SUSPICIOUS`) in real-time!*
+
+Open `http://localhost:3000` to watch the dashboard update in real-time.
 
 ---
 
-## 🛡️ Engineering Principles
+## Project Structure
 
-1. **Zero-Trust Boundaries**: Every service parses incoming payloads against strict Zod/Pydantic schemas. 
-2. **Polyglot Optimization**: The right tool for the right job (Python for AI, Go for concurrent state management, Node/React for IO/Web).
-3. **Horizontal Scalability**: The Pub/Sub decoupled architecture allows any engine to scale horizontally without blocking upstream ingestion.
+```
+sherlock/
+├── apps/
+│   ├── web/              # Next.js 15 frontend dashboard
+│   ├── gateway/          # NestJS webhook ingestion service
+│   ├── notification/     # NestJS WebSocket notification server
+│   └── ai-engine/        # FastAPI intelligence engines (Python)
+├── packages/
+│   ├── contracts/        # Shared Zod event schemas
+│   ├── database/         # Prisma schema and migrations
+│   ├── redis-client/     # Shared Redis connection factory
+│   ├── eslint-config/    # Shared ESLint configuration
+│   └── tsconfig/         # Shared TypeScript configurations
+├── docker/               # Dockerfiles for each service
+├── docs/                 # Engineering documentation
+│   ├── TECHNICAL_DESIGN.md
+│   ├── ENGINEERING_RULEBOOK.md
+│   ├── CODING_STANDARDS.md
+│   ├── DEVELOPMENT_WORKFLOW.md
+│   ├── SPRINT_PLAN.md
+│   ├── PROJECT_CHECKLIST.md
+│   └── IMPLEMENTATION_ORDER.md
+└── scripts/              # E2E simulation and utilities
+```
+
+---
+
+## How It Works
+
+1. **Webhook arrives** from a meeting platform (Zoom, Meet, Teams)
+2. **Gateway validates** the payload against strict Zod schemas and publishes to Redis
+3. **Intelligence engines** independently analyze the event:
+   - **Metadata Engine** — fuzzy name matching, join order analysis
+   - **Conversation Engine** — LLM-powered transcript role classification
+   - **Audio Engine** — speaking duration and pattern analysis
+   - **Video Engine** — webcam state and face analysis
+   - **Behavioral Engine** — interaction pattern analysis
+4. Each engine produces **weighted evidence** with a score, confidence, and explanation
+5. **Evidence Aggregator** collects all evidence with temporal decay weighting
+6. **Confidence Engine** computes per-participant confidence scores using Bayesian updating
+7. **Decision Engine** transitions session state: `PENDING → TENTATIVE → IDENTIFIED → CONFIRMED`
+8. **Notification Server** broadcasts state updates via WebSocket to the dashboard
+9. **Dashboard** renders real-time participant cards, confidence graphs, and explanations
+
+---
+
+## Assumptions
+
+See [docs/assumptions.md](docs/assumptions.md) for a complete list of design assumptions.
+
+Key assumptions:
+
+- The system receives webhook events from a meeting bot (not implemented in this prototype)
+- Audio/video analysis uses heuristics; production would use ML models
+- LLM analysis requires a Gemini API key
+- The prototype uses simulated events via `pnpm test:e2e`
+
+---
+
+## Evaluation
+
+See [docs/evaluation_metrics.md](docs/evaluation_metrics.md) for metrics, edge cases, and limitations.
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE).

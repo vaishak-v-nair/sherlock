@@ -1,23 +1,56 @@
-node_modules
+# Dependencies
+node_modules/
 .pnp
 .pnp.js
-coverage
+
+# Build outputs
+dist/
+build/
 .next/
 out/
-build
-dist
+*.js.map
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+*.egg-info/
+.eggs/
+
+# Environment
 .env
 .env.local
-.env.development.local
-.env.test.local
-.env.production.local
-.turbo
-*.log
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
 .DS_Store
-__pycache__/
-*.pyc
-.pytest_cache/
-.ruff_cache/
-.venv/
+Thumbs.db
+
+# Turbo
+.turbo/
+
+# Testing
+coverage/
+.nyc_output/
+
+# Docker
+*.log
+
+# Database
+*.db
+*.sqlite
+
+# Misc
+*.tsbuildinfo
+.eslintcache
+.prettiercache
 Redis/
 Redis.zip

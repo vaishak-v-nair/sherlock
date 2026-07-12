@@ -1,0 +1,17 @@
+node_modules
+.next
+dist
+build
+coverage
+.git
+.github
+.turbo
+.husky
+.venv
+__pycache__
+*.md
+*.log
+Redis
+Redis.zip
+docker
+docs
